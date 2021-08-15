@@ -8,9 +8,9 @@ from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 
 path = os.getcwd()
-img_dir = path + '/data/pumpkin/'
+img_dir = path + '/data/brick/'
 images = os.listdir(img_dir)
-downscale = 2
+downscale = 1
 convert_gray = False
 cameras = []
 point_cloud = []
@@ -84,14 +84,14 @@ class Camera:
 
 def get_camera_intrinsic_params(images_dir, downscale):
     K = []
-    img = Image.open(images_dir + os.listdir(images_dir)[0])
+    img = Image.open(images_dir + os.listdir(images_dir)[1])
     exif = {
-        'FocalLength': 0.85,
+        'FocalLength': 26,
         'Make': "notindatabase",
         'Model': "notindatabase",
         'ExifImageWidth': img.size[0],
         'ExifImageHeight': img.size[1],
-        'SensorWidth': 1
+        'SensorWidth': 35
     }
     exifdata = img.getexif()
     for tag_id in exifdata:
@@ -103,9 +103,10 @@ def get_camera_intrinsic_params(images_dir, downscale):
     db = TinyDB('cameras.json')
     res = db.search(Camera.make.search(exif['Make'].split(' ')[0], flags=re.IGNORECASE) & 
                     Camera.model.search(exif['Model'].strip(), flags=re.IGNORECASE))
-    exif['SensorWidth'] = res[0]['sensor_width'] if len(res) > 0 else 1
+    exif['SensorWidth'] = res[0]['sensor_width'] if len(res) > 0 else exif['SensorWidth']
     exif['FocalLength'] = (exif['FocalLength'][0]/exif['FocalLength'][1]) if isinstance(exif['FocalLength'], tuple) else exif['FocalLength']
-    focal_length = (exif['FocalLength']/exif['SensorWidth'])*exif['ExifImageWidth']
+    image_width = exif['ExifImageWidth'] if exif['ExifImageWidth'] > exif['ExifImageHeight'] else exif['ExifImageHeight']
+    focal_length = (exif['FocalLength']/exif['SensorWidth'])*image_width
     K.append([focal_length / float(downscale), 0, exif['ExifImageWidth']/(2 * float(downscale))])
     K.append([0, focal_length / float(downscale), exif['ExifImageHeight']/(2 * float(downscale))])
     K.append([0, 0, 1])
