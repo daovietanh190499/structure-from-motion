@@ -2,9 +2,14 @@
 
 # First image pair retrieval
 
-First image pair is greatly affect the result of structure from motion pipeline. First image pair should have as many matching feature keypoints as possible \
-and the repartition of the corresponding features in each image. But at the same time, the baseline or angle between cameras should also be large enough \
-to provide reliable geometric information. In my experience, we can choose first image pair manually and put it on the first position of dataset
+First image pair is greatly affect the result of structure from motion pipeline. First image pair should have as many matching feature keypoints as possible and the repartition of the corresponding features in each image. But at the same time, the baseline or angle between cameras should also be large enough to provide reliable geometric information. In my experience, we can choose first image pair manually and put it on the first position of dataset. As the images below, we have 5 type of image pairs:
+
+![View1](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view0.png "View1")
+![View2](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view1.png "View2")
+![View3](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view2.png "View3")
+![View4](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view3.png "View4")
+![View4](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view4.png "View4")
+
 
 # My result
 
