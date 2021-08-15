@@ -5,17 +5,17 @@
 First image pair is greatly affect the result of structure from motion pipeline. First image pair should have as many matching feature keypoints as possible and the repartition of the corresponding features in each image. But at the same time, the baseline or angle between cameras should also be large enough to provide reliable geometric information. In my experience, we can choose first image pair manually and put it on the first position of dataset. As the images below, we have 5 type of image pairs:
 
 ## Type 1
-Two cameras have same location and same direction but different field of view. This view pair position is not able to be used for reconstruct 3d points but it's able to be used for estimates the intrinsic params. this view pair is also called "pure rotation".
+Two cameras have same location and same direction but different field of view. This view pair position is not able to be used for reconstruct 3d points but it's able to be used for estimates the intrinsic params. this view pair is also called "pure rotation". <br>
 ![View1](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view0.png "View1")
 ## Type 2
-Two cameras have same location and same field of view but different direction. This view pair position is able to be used for reconstruct 3d points but the 3d points have very low quality. 
+Two cameras have same location and same field of view but different direction. This view pair position is able to be used for reconstruct 3d points but the 3d points have very low quality. <br>
 ![View2](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view1.png "View2")
 ## Type 3 and Type 4
-Two cameras have same direction and same field of view but different location. This view pair position is good to be used for reconstruct 3d points. 
+Two cameras have same direction and same field of view but different location. This view pair position is good to be used for reconstruct 3d points. <br>
 ![View3](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view2.png "View3")
 ![View4](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view3.png "View4")
 ## Type 5
-Two cameras have different location, different direction and same field of view. This view pair position is the best to be used for reconstruct 3d points. It has large baseline between cameras, the cameras also have enough feature points for reconstruct reliable 3d point cloud.
+Two cameras have different location, different direction and same field of view. This view pair position is the best to be used for reconstruct 3d points. It has large baseline between cameras, the cameras also have enough feature points for reconstruct reliable 3d point cloud. <br>
 ![View4](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view4.png "View4")
 
 
