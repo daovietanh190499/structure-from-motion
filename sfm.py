@@ -7,10 +7,12 @@ from tinydb import TinyDB, Query
 from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 
-path = os.getcwd()
-img_dir = path + '/data/brick/'
+# path = os.getcwd()
+path = '..'
+img_dir = path + '/gustav/'
 images = os.listdir(img_dir)
-downscale = 1
+images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
+downscale = 2
 convert_gray = False
 cameras = []
 point_cloud = []
@@ -21,13 +23,11 @@ class Point3d:
         self.y = y
         self.z = z
         self.color = color
-        self.triangulate = False
     
     def fromNumpy(self, pt):
         self.x = pt[0]
         self.y = pt[1]
         self.z = pt[2]
-        self.triangulate = True
     
     def numpy(self):
         return np.array([self.x, self.y, self.z])
@@ -35,20 +35,20 @@ class Point3d:
 class Camera:
     def __init__(self, id, img, kp, desc, match2d3d):
         self.id = id
+        self.img = img
         self.kp = kp
         self.desc = desc 
         self.match2d3d = match2d3d
         self.Rt = None
         self.reconstrucable = False
         self.reconstruct = False
-        self.color = []
-        for pt in kp:
-            a,b = pt.pt
-            self.color.append(img[int(b),int(a),:])
 
     def setRt(self, R, t):
         self.Rt = np.hstack((R, t))
         self.reconstruct = True
+    
+    def getRt(self):
+        return self.Rt[:3,:3], self.Rt[:3, 3]
     
     def getP(self, K):
         return np.matmul(K, self.Rt)
@@ -60,27 +60,6 @@ class Camera:
     
     def getFeature(self):
         return (self.kp, self.desc)
-
-    def countMatch(self, other):
-        return np.sum((np.in1d(self.match2d3d, other.match2d3d))*(self.match2d3d != -1))
-    
-    def get2d3dCoresspondence(self, point_cloud):
-        point_3d_idx = self.match2d3d
-        mask = np.array([point_cloud[j].triangulate if j != -1 else False for j in point_3d_idx])
-        points_3d_n = np.float32([point_cloud[i].numpy() for i in np.array(point_3d_idx)[mask == 1]])
-        points_2d_n = np.float32([self.kp[j].pt for j in np.where(mask)[0]])
-        return points_3d_n, points_2d_n
-
-    def getMatch(self, other):
-        idx0 = np.where((np.in1d(self.match2d3d, other.match2d3d))*(self.match2d3d != -1))[0]
-        idx1 = np.where((np.in1d(other.match2d3d, self.match2d3d))*(other.match2d3d != -1))[0]
-        pts0 = np.array([self.kp[i].pt for i in idx0])
-        pts1 = np.array([other.kp[i].pt for i in idx1])
-        pts3d0 = self.match2d3d[idx0]
-        pts3d1 = other.match2d3d[idx1]
-        pts3d0_idx = np.argsort(pts3d0)
-        pts3d1_idx = np.argsort(pts3d1)
-        return pts0[pts3d0_idx], pts1[pts3d1_idx], pts3d0[pts3d0_idx]
 
 def get_camera_intrinsic_params(images_dir, downscale):
     K = []
@@ -124,8 +103,9 @@ def extract_features(imggray, convert_gray):
     if convert_gray:
         imggray = cv2.cvtColor(imggray, cv2.COLOR_BGR2GRAY)
     detect = cv2.SIFT_create()
+    descript = detect
     kp = detect.detect(imggray, None)
-    kp,des = detect.compute(imggray, kp)
+    kp,des = descript.compute(imggray, kp)
     return kp,des
 
 def match_feature(fea0, fea1):
@@ -137,7 +117,7 @@ def match_feature(fea0, fea1):
 
     good = []
     for m, n in matches:
-        if m.distance < 0.70 * n.distance:
+        if m.distance < 0.7 * n.distance:
             good.append(m)
 
     pts0 = np.float32([kp0[m.queryIdx].pt for m in good])
@@ -147,14 +127,28 @@ def match_feature(fea0, fea1):
 
     return pts0, pts1, index0, index1
 
-def triangulate(P1, P2, pts0, pts1, pts3d_idx):
-    points_3d = cv2.triangulatePoints(P1, P2, pts0.T, pts1.T)
+def featureTracking(image_ref, image_cur, px_ref):
+    lk_params = dict(winSize  = (21, 21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
+    kp2, st, err = cv2.calcOpticalFlowPyrLK(image_ref, image_cur, px_ref, None, **lk_params)  #shape: [k,2] [k,1] [k,1]
+    st = st.reshape(st.shape[0])
+    kp1 = px_ref[st == 1]
+    kp2 = kp2[st == 1]
+    return kp1, kp2
+
+def triangulate(cam1, cam2, idx0, idx1, K):
+    points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), np.float32([cam1.kp[i].pt for i in idx0]).T, np.float32([cam2.kp[i].pt for i in idx1]).T)
     points_3d = points_3d / points_3d[3]
     points_3d = cv2.convertPointsFromHomogeneous(points_3d.T)
     points_3d = points_3d[:, 0, :]
-    for j in range(len(pts3d_idx)):
-        if not point_cloud[pts3d_idx[j]].triangulate:
-            point_cloud[pts3d_idx[j]].fromNumpy(points_3d[j])
+    for w, i in enumerate(idx0):
+        if cam1.match2d3d[i] != -1:
+            cam2.match2d3d[idx1[w]] = cam1.match2d3d[i]
+        else:
+            pt3d =  Point3d(0,0,0)
+            pt3d.fromNumpy(points_3d[w])
+            point_cloud.append(pt3d)
+            cam2.match2d3d[idx1[w]] = len(point_cloud) - 1
+            cam1.match2d3d[i] = len(point_cloud) - 1
 
 def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
     out_points = point_cloud.reshape(-1, 3) * 200
@@ -185,78 +179,37 @@ def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
         np.savetxt(f, verts, '%f %f %f %d %d %d')
 
 exif, K = get_camera_intrinsic_params(img_dir, downscale)
+# K = np.array([[718.8560/downscale, 0, 607.1928/downscale], [0, 718.8560/downscale, 185.2157/downscale], [0,0,1]])
 
+prev_idx1 = np.array([])
+j = 0
 for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
-        img = Image.open(img_dir + images[i]).convert('RGB')
-        # img = ImageOps.exif_transpose(img)
-        if img.size[0] == exif['ExifImageWidth'] and img.size[1] == exif['ExifImageHeight']:
-            img = img_downscale(np.array(img)[:,:,::-1], downscale)
+        img = cv2.imread(img_dir + images[i])
+        if img.shape[0] == exif['ExifImageWidth'] and img.shape[1] == exif['ExifImageHeight']:
+            img = img_downscale(img, downscale)
             kp, des = extract_features(img, convert_gray)
             cameras.append(Camera(images[i], img, kp, des, np.ones((len(kp),), dtype='int32')*-1))
-
-old_index1 = np.array([])
-i = 0
-j = 1
-with tqdm(total=len(cameras)-1) as pbar:
-    while i != len(cameras) - 1 and i + j < len(cameras):
-        pts0, pts1, index0, index1 = match_feature(cameras[i], cameras[i + j])
-        F, mask = cv2.findFundamentalMat(pts0, pts1, cv2.FM_RANSAC, 3.0, 0.99)
-        if not isinstance(mask, np.ndarray):
-            break
-        pts0 = pts0[mask.ravel() == 1]
-        pts1 = pts1[mask.ravel() == 1]
-        index0 = index0[mask.ravel() == 1]
-        index1 = index1[mask.ravel() == 1]
-        match2d3d = np.where(np.in1d(index0, old_index1))[0]
-        if len(pts0) >= 50 and (i == 0 or len(match2d3d) >= 4):
-            for k in range(len(pts0)):
-                p3d_idx = cameras[i].match2d3d[index0[k]]
-                if p3d_idx != -1:
-                    cameras[i+j].match2d3d[index1[k]] = p3d_idx
+            if j > 0:
+                pts0_, pts1_, idx0, idx1 = match_feature(cameras[j-1], cameras[j])
+                E, mask = cv2.findEssentialMat(pts0_, pts1_, K, method=cv2.RANSAC, prob=0.999, threshold=1)
+                idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
+                if j == 1:
+                    _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
+                    cameras[j-1].setRt(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]), np.array([[0], [0], [0]]))
                 else:
-                    point_cloud.append(Point3d(0, 0, 0, color=cameras[i].color[index0[k]]))
-                    cameras[i].match2d3d[index0[k]] = len(point_cloud) - 1
-                    cameras[i+j].match2d3d[index1[k]] = len(point_cloud) - 1
-            cameras[i].reconstrucable = True
-            cameras[i + j].reconstrucable = True
-            i = i + j
-            old_index1 = index1.copy()
-            j = 1
-        else:
+                    match = np.where(np.in1d(idx0, prev_idx1))[0]
+                    if len(match) < 8: continue
+                    ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]].numpy() for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
+                    R, _ = cv2.Rodrigues(rvecs)
+                cameras[j].setRt(R, t)
+                prev_idx1 = idx1.copy()
+                triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
             j += 1
-        pbar.update(1)
+            for k in range(len(cameras[-1].kp)):
+                img = cv2.circle(img, (int(cameras[-1].kp[k].pt[0]), int(cameras[-1].kp[k].pt[1])), 2, (0, 0, 255), 2)
+            cv2.imshow('vid', img)
+            cv2.waitKey(1)
 
-new_cams = []
-for cam in cameras:
-    if cam.reconstrucable:
-        new_cams.append(cam)
-cameras = new_cams
-
-init_idx = 0
-
-pts0, pts1, pts3d_idx = cameras[init_idx].getMatch(cameras[init_idx+1])
-E, mask = cv2.findEssentialMat(pts0, pts1, K, method=cv2.RANSAC, prob=0.999, threshold=1, mask=None)
-_, R, t, mask = cv2.recoverPose(E, pts0[mask.ravel() == 1], pts1[mask.ravel() == 1], K)
-cameras[init_idx].setRt(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]), np.array([[0], [0], [0]]))
-cameras[init_idx + 1].setRt(R, t)
-points_3d = triangulate(cameras[init_idx].getP(K), cameras[init_idx+1].getP(K), pts0, pts1, pts3d_idx)
-
-for i in tqdm(range(2, len(cameras))):
-    points_3d_n, points_2d_n = cameras[i].get2d3dCoresspondence(point_cloud)
-    ret, rvecs, trans, inliers = cv2.solvePnPRansac(points_3d_n, points_2d_n, K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
-    Rot, _ = cv2.Rodrigues(rvecs)
-    cameras[i].setRt(Rot, trans)
-    pts0, pts1, pts3d_idx = cameras[i-1].getMatch(cameras[i])
-    points_3d = triangulate(cameras[i-1].getP(K), cameras[i].getP(K), pts0, pts1, pts3d_idx)
-
-points_3d = []
-colors = []
-for pt in point_cloud:
-    if pt.triangulate:
-        coord, color = pt.numpy(), pt.color
-        points_3d.append(coord)
-        colors.append(color)
-campos = [cam.getPos() for cam in cameras]
-to_ply(img_dir, np.array(points_3d), np.array(colors))
-to_ply(img_dir, np.array(campos), np.ones_like(np.array(campos))*255, '_campos.ply')
+to_ply(img_dir, np.array([pt.numpy() for pt in point_cloud]), np.array([pt.color for pt in point_cloud]))
+to_ply(img_dir, np.array([cam.getPos() for cam in cameras]), np.ones_like(np.array([cam.getPos() for cam in cameras]))*255, '_campos.ply')
