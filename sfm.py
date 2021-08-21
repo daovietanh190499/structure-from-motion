@@ -158,28 +158,29 @@ j = 0
 for i in tqdm(range(len(images))[:500]):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
         img = cv2.imread(img_dir + images[i])
-        if img.shape[1] == exif['ExifImageWidth'] and img.shape[0] == exif['ExifImageHeight']:
-            img = img_downscale(img, downscale)
-            kp, des = extract_features(img)
-            cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
-            if j > 0:
-                pts0_, pts1_, idx0, idx1 = match_feature(cameras[j-1], cameras[j])
-                E, mask = cv2.findEssentialMat(pts0_, pts1_, K, method=cv2.RANSAC, prob=0.999, threshold=1)
-                idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
-                _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
-                if j != 1:
-                    match = np.where(np.in1d(idx0, prev_idx1))[0]
-                    if len(match) < 8: continue
-                    ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]] for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
-                    R, _ = cv2.Rodrigues(rvecs)
-                cameras[j].setRt(R, t)
-                prev_idx1 = idx1.copy()
-                triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
-            j += 1
-            for k in range(len(cameras[-1].kp)):
-                img = cv2.circle(img, (int(cameras[-1].kp[k].pt[0]), int(cameras[-1].kp[k].pt[1])), 2, (0, 0, 255), 2)
-            cv2.imshow('vid', img)
-            cv2.waitKey(1)
+        if img.shape[1] != exif['ExifImageWidth'] or img.shape[0] != exif['ExifImageHeight']:
+            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        img = img_downscale(img, downscale)
+        kp, des = extract_features(img)
+        cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
+        if j > 0:
+            pts0_, pts1_, idx0, idx1 = match_feature(cameras[j-1], cameras[j])
+            E, mask = cv2.findEssentialMat(pts0_, pts1_, K, method=cv2.RANSAC, prob=0.999, threshold=1)
+            idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
+            _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
+            if j != 1:
+                match = np.where(np.in1d(idx0, prev_idx1))[0]
+                if len(match) < 8: continue
+                ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]] for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
+                R, _ = cv2.Rodrigues(rvecs)
+            cameras[j].setRt(R, t)
+            prev_idx1 = idx1.copy()
+            triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
+        j += 1
+        for k in range(len(cameras[-1].kp)):
+            img = cv2.circle(img, (int(cameras[-1].kp[k].pt[0]), int(cameras[-1].kp[k].pt[1])), 2, (0, 0, 255), 2)
+        cv2.imshow('vid', img)
+        cv2.waitKey(1)
 
 to_ply(img_dir, np.array(point_cloud), np.array(point_color))
 to_ply(img_dir, np.array([cam.getPos() for cam in cameras]), np.ones_like(np.array([cam.getPos() for cam in cameras]))*255, '_campos.ply')
