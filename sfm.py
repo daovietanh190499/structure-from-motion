@@ -127,14 +127,6 @@ def match_feature(fea0, fea1):
 
     return pts0, pts1, index0, index1
 
-def featureTracking(image_ref, image_cur, px_ref):
-    lk_params = dict(winSize  = (21, 21), criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
-    kp2, st, err = cv2.calcOpticalFlowPyrLK(image_ref, image_cur, px_ref, None, **lk_params)  #shape: [k,2] [k,1] [k,1]
-    st = st.reshape(st.shape[0])
-    kp1 = px_ref[st == 1]
-    kp2 = kp2[st == 1]
-    return kp1, kp2
-
 def triangulate(cam1, cam2, idx0, idx1, K):
     points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), np.float32([cam1.kp[i].pt for i in idx0]).T, np.float32([cam2.kp[i].pt for i in idx1]).T)
     points_3d = points_3d / points_3d[3]
