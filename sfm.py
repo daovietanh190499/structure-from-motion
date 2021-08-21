@@ -153,7 +153,6 @@ def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
 exif, K = get_camera_intrinsic_params(img_dir, downscale)
 # K = np.array([[718.8560/downscale, 0, 607.1928/downscale], [0, 718.8560/downscale, 185.2157/downscale], [0,0,1]])
 
-prev_idx1 = np.array([])
 j = 0
 for i in tqdm(range(len(images))[:500]):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
@@ -169,12 +168,11 @@ for i in tqdm(range(len(images))[:500]):
             idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
             _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
             if j != 1:
-                match = np.where(np.in1d(idx0, prev_idx1))[0]
+                match = np.where(cameras[j-1].match2d3d[idx0] != -1)[0]
                 if len(match) < 8: continue
                 ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]] for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
                 R, _ = cv2.Rodrigues(rvecs)
             cameras[j].setRt(R, t)
-            prev_idx1 = idx1.copy()
             triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
         j += 1
         for k in range(len(cameras[-1].kp)):
