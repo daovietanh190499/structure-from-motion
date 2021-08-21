@@ -23,8 +23,7 @@ class Camera:
         self.kp = kp
         self.desc = desc 
         self.match2d3d = match2d3d
-        self.Rt = None
-        self.reconstrucable = False
+        self.Rt = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
         self.reconstruct = False
 
     def setRt(self, R, t):
@@ -167,10 +166,8 @@ for i in tqdm(range(len(images))[:500]):
                 pts0_, pts1_, idx0, idx1 = match_feature(cameras[j-1], cameras[j])
                 E, mask = cv2.findEssentialMat(pts0_, pts1_, K, method=cv2.RANSAC, prob=0.999, threshold=1)
                 idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
-                if j == 1:
-                    _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
-                    cameras[j-1].setRt(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]), np.array([[0], [0], [0]]))
-                else:
+                _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
+                if j != 1:
                     match = np.where(np.in1d(idx0, prev_idx1))[0]
                     if len(match) < 8: continue
                     ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]] for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
