@@ -7,8 +7,7 @@ from tinydb import TinyDB, Query
 from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 
-# path = os.getcwd()
-path = '..'
+path = os.getcwd()
 img_dir = path + '/gustav/'
 images = os.listdir(img_dir)
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
@@ -40,7 +39,6 @@ class Camera:
         self.desc = desc 
         self.match2d3d = match2d3d
         self.Rt = None
-        self.reconstrucable = False
         self.reconstruct = False
 
     def setRt(self, R, t):
@@ -178,7 +176,7 @@ j = 0
 for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
         img = cv2.imread(img_dir + images[i])
-        if img.shape[0] == exif['ExifImageWidth'] and img.shape[1] == exif['ExifImageHeight']:
+        if img.shape[1] == exif['ExifImageWidth'] and img.shape[0] == exif['ExifImageHeight']:
             img = img_downscale(img, downscale)
             kp, des = extract_features(img, convert_gray)
             cameras.append(Camera(images[i], img, kp, des, np.ones((len(kp),), dtype='int32')*-1))
