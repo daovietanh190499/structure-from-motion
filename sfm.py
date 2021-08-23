@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 
 path = os.getcwd()
-img_dir = path + '/gustav/'
+img_dir = path + '/dataset/gustav/'
 images = os.listdir(img_dir)
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 downscale = 2
@@ -32,6 +32,9 @@ class Camera:
     
     def getRt(self):
         return self.Rt[:3,:3], self.Rt[:3, 3]
+
+    def getRelativeRt(self, cam2):
+        return cam2.Rt[:3,:3].T.dot(self.Rt[:3,:3]), cam2.Rt[:3, :3].T.dot(self.Rt[:3, 3] - cam2.Rt[:3, 3])
     
     def getP(self, K):
         return np.matmul(K, self.Rt)
@@ -154,7 +157,7 @@ exif, K = get_camera_intrinsic_params(img_dir, downscale)
 # K = np.array([[718.8560/downscale, 0, 607.1928/downscale], [0, 718.8560/downscale, 185.2157/downscale], [0,0,1]])
 
 j = 0
-for i in tqdm(range(len(images))[:500]):
+for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
         img = cv2.imread(img_dir + images[i])
         if img.shape[1] != exif['ExifImageWidth'] or img.shape[0] != exif['ExifImageHeight']:
