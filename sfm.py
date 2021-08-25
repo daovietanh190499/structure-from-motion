@@ -1,11 +1,8 @@
 import os
 import cv2
-import re
 import numpy as np
 from tqdm import tqdm
-from tinydb import TinyDB, Query
-from PIL import Image, ImageOps
-from PIL.ExifTags import TAGS
+import exifread
 
 path = os.getcwd()
 img_dir = path + '/dataset/gustav/'
@@ -49,33 +46,16 @@ class Camera:
 
 def get_camera_intrinsic_params(images_dir, downscale):
     K = []
-    img = Image.open(images_dir + os.listdir(images_dir)[1])
-    exif = {
-        'FocalLength': 26,
-        'Make': "notindatabase",
-        'Model': "notindatabase",
-        'ExifImageWidth': img.size[0],
-        'ExifImageHeight': img.size[1],
-        'SensorWidth': 35
-    }
-    exifdata = img.getexif()
-    for tag_id in exifdata:
-        tag = TAGS.get(tag_id, tag_id)
-        if tag in exif.keys():
-            print(f"{tag:25}: {exifdata.get(tag_id)}")
-            exif[tag] = exifdata.get(tag_id)
-    Camera = Query()
-    db = TinyDB('cameras.json')
-    res = db.search(Camera.make.search(exif['Make'].split(' ')[0], flags=re.IGNORECASE) & 
-                    Camera.model.search(exif['Model'].strip(), flags=re.IGNORECASE))
-    exif['SensorWidth'] = res[0]['sensor_width'] if len(res) > 0 else exif['SensorWidth']
-    exif['FocalLength'] = (exif['FocalLength'][0]/exif['FocalLength'][1]) if isinstance(exif['FocalLength'], tuple) else exif['FocalLength']
-    image_width = exif['ExifImageWidth'] if exif['ExifImageWidth'] > exif['ExifImageHeight'] else exif['ExifImageHeight']
-    focal_length = (exif['FocalLength']/exif['SensorWidth'])*image_width
-    K.append([focal_length / float(downscale), 0, exif['ExifImageWidth']/(2 * float(downscale))])
-    K.append([0, focal_length / float(downscale), exif['ExifImageHeight']/(2 * float(downscale))])
+    h, w, c = cv2.imread(images_dir + os.listdir(images_dir)[1]).shape
+    img = open(images_dir + os.listdir(images_dir)[1], 'rb')
+    exif = {'EXIF FocalLengthIn35mmFilm': exifread.classes.IfdTag(True, 'focal', int, 29, 1, 32)}
+    exif = exifread.process_file(img, details=False)
+    image_width = w if w > h else h
+    focal_length = (int(exif['EXIF FocalLengthIn35mmFilm'].values[0])/35)*image_width
+    K.append([focal_length / float(downscale), 0, w/(2 * float(downscale))])
+    K.append([0, focal_length / float(downscale), h/(2 * float(downscale))])
     K.append([0, 0, 1])
-    return exif, np.array(K, dtype=float)
+    return {'width': w, 'height': h}, np.array(K, dtype=float)
 
 def img_downscale(img, downscale):
 	downscale = int(downscale/2)
@@ -160,7 +140,7 @@ j = 0
 for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
         img = cv2.imread(img_dir + images[i])
-        if img.shape[1] != exif['ExifImageWidth'] or img.shape[0] != exif['ExifImageHeight']:
+        if img.shape[1] != exif['width'] or img.shape[0] != exif['height']:
             img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
         img = img_downscale(img, downscale)
         kp, des = extract_features(img)
