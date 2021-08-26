@@ -48,14 +48,14 @@ def get_camera_intrinsic_params(images_dir, downscale):
     K = []
     h, w, c = cv2.imread(images_dir + os.listdir(images_dir)[1]).shape
     img = open(images_dir + os.listdir(images_dir)[1], 'rb')
-    exif = {'EXIF FocalLengthIn35mmFilm': exifread.classes.IfdTag(True, 'focal', int, 29, 1, 32)}
     exif = exifread.process_file(img, details=False)
-    image_width = w if w > h else h
-    focal_length = (int(exif['EXIF FocalLengthIn35mmFilm'].values[0])/35)*image_width
+    exif = exif if 'EXIF FocalLengthIn35mmFilm' in exif else {'EXIF FocalLengthIn35mmFilm': exifread.classes.IfdTag(True, 'focal', list, [37.66], 1, 32)}
+    image_width, image_height = (w, h) if w > h else (h, w)
+    focal_length = (exif['EXIF FocalLengthIn35mmFilm'].values[0]/35)*image_width
     K.append([focal_length / float(downscale), 0, w/(2 * float(downscale))])
     K.append([0, focal_length / float(downscale), h/(2 * float(downscale))])
     K.append([0, 0, 1])
-    return {'width': w, 'height': h}, np.array(K, dtype=float)
+    return {'width': image_width, 'height': image_height}, np.array(K, dtype=float)
 
 def img_downscale(img, downscale):
 	downscale = int(downscale/2)
@@ -70,6 +70,7 @@ def extract_features(imggray):
     descript = detect
     kp = detect.detect(imggray, None)
     kp,des = descript.compute(imggray, kp)
+    kp = np.float32([pt.pt for pt in kp])
     return kp,des
 
 def match_feature(fea0, fea1):
@@ -84,15 +85,13 @@ def match_feature(fea0, fea1):
         if m.distance < 0.7 * n.distance:
             good.append(m)
 
-    pts0 = np.float32([kp0[m.queryIdx].pt for m in good])
-    pts1 = np.float32([kp1[m.trainIdx].pt for m in good])
     index0 = np.int32([m.queryIdx for m in good])
     index1 = np.int32([m.trainIdx for m in good])
 
-    return pts0, pts1, index0, index1
+    return kp0[index0], kp1[index1], index0, index1
 
 def triangulate(cam1, cam2, idx0, idx1, K):
-    points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), np.float32([cam1.kp[i].pt for i in idx0]).T, np.float32([cam2.kp[i].pt for i in idx1]).T)
+    points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), cam1.kp[idx0].T, cam2.kp[idx1].T)
     points_3d = points_3d / points_3d[3]
     points_3d = cv2.convertPointsFromHomogeneous(points_3d.T)
     points_3d = points_3d[:, 0, :]
@@ -101,7 +100,7 @@ def triangulate(cam1, cam2, idx0, idx1, K):
             cam2.match2d3d[idx1[w]] = cam1.match2d3d[i]
         else:
             point_cloud.append(points_3d[w])
-            point_color.append(cam1.img[int(cam1.kp[i].pt[1]), int(cam1.kp[i].pt[0]), :])
+            point_color.append(cam1.img[int(cam1.kp[i][1]), int(cam1.kp[i][0]), :])
             cam2.match2d3d[idx1[w]] = len(point_cloud) - 1
             cam1.match2d3d[i] = len(point_cloud) - 1
 
@@ -138,7 +137,7 @@ exif, K = get_camera_intrinsic_params(img_dir, downscale)
 
 j = 0
 for i in tqdm(range(len(images))):
-    if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'raw']:
+    if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'RAW', 'raw']:
         img = cv2.imread(img_dir + images[i])
         if img.shape[1] != exif['width'] or img.shape[0] != exif['height']:
             img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
@@ -151,15 +150,15 @@ for i in tqdm(range(len(images))):
             idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
             _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
             if j != 1:
-                match = np.where(cameras[j-1].match2d3d[idx0] != -1)[0]
+                match = np.int32(np.where(cameras[j-1].match2d3d[idx0] != -1)[0])
                 if len(match) < 8: continue
-                ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32([point_cloud[cameras[j-1].match2d3d[idx0[m]]] for m in match]), np.float32([cameras[j].kp[idx1[m]].pt for m in match]), K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
+                ret, rvecs, t, inliers = cv2.solvePnPRansac(np.float32(point_cloud)[cameras[j-1].match2d3d[idx0[match]]], cameras[j].kp[idx1[match]], K, np.zeros((5, 1), dtype=np.float32), cv2.SOLVEPNP_ITERATIVE)
                 R, _ = cv2.Rodrigues(rvecs)
             cameras[j].setRt(R, t)
             triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
         j += 1
         for k in range(len(cameras[-1].kp)):
-            img = cv2.circle(img, (int(cameras[-1].kp[k].pt[0]), int(cameras[-1].kp[k].pt[1])), 2, (0, 0, 255), 2)
+            img = cv2.circle(img, (int(cameras[-1].kp[k][0]), int(cameras[-1].kp[k][1])), 2, (0, 0, 255), 2)
         cv2.imshow('vid', img)
         cv2.waitKey(1)
 
