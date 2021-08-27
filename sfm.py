@@ -10,7 +10,6 @@ path = '..'
 img_dir = path + '/dataset/Unmasked/'
 images = os.listdir(img_dir)
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
-downscale = 2
 cameras = []
 point_cloud = []
 point_color = []
@@ -46,7 +45,7 @@ class Camera:
     def getFeature(self):
         return (self.kp, self.desc)
 
-def get_camera_intrinsic_params(images_dir, downscale):
+def get_camera_intrinsic_params(images_dir):
     K = []
     h, w, c = cv2.imread(images_dir + os.listdir(images_dir)[1]).shape
     img = open(images_dir + os.listdir(images_dir)[1], 'rb')
@@ -54,18 +53,10 @@ def get_camera_intrinsic_params(images_dir, downscale):
     exif = exif if 'EXIF FocalLengthIn35mmFilm' in exif else {'EXIF FocalLengthIn35mmFilm': exifread.classes.IfdTag(True, 'focal', list, [37.66], 1, 32)}
     image_width, image_height = (w, h) if w > h else (h, w)
     focal_length = (exif['EXIF FocalLengthIn35mmFilm'].values[0]/35)*image_width
-    K.append([focal_length / float(downscale), 0, w/(2 * float(downscale))])
-    K.append([0, focal_length / float(downscale), h/(2 * float(downscale))])
+    K.append([focal_length, 0, w/2])
+    K.append([0, focal_length, h/2])
     K.append([0, 0, 1])
     return {'width': image_width, 'height': image_height}, np.array(K, dtype=float)
-
-def img_downscale(img, downscale):
-	downscale = int(downscale/2)
-	i = 1
-	while(i <= downscale):
-		img = cv2.pyrDown(img)
-		i = i + 1
-	return img
 
 def triangulate(cam1, cam2, idx0, idx1, K):
     points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), cam1.kp[idx0].T, cam2.kp[idx1].T)
@@ -109,7 +100,7 @@ def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
         f.write(ply_header % dict(vert_num=len(verts)))
         np.savetxt(f, verts, '%f %f %f %d %d %d')
 
-exif, K = get_camera_intrinsic_params(img_dir, downscale)
+exif, K = get_camera_intrinsic_params(img_dir)
 # K = np.array([[718.8560/downscale, 0, 607.1928/downscale], [0, 718.8560/downscale, 185.2157/downscale], [0,0,1]])
 
 j = 0
@@ -118,7 +109,6 @@ for i in tqdm(range(len(images))):
         img = cv2.imread(img_dir + images[i])
         if img.shape[1] != exif['width'] or img.shape[0] != exif['height']:
             img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        img = img_downscale(img, downscale)
         kp, des = extract_features(img)
         cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
         if j > 0:
