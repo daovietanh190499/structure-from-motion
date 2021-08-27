@@ -4,6 +4,7 @@ from disk_features.disk import DISK
 import torch.nn.functional as F
 from disk_features.disk.geom import distance_matrix
 
+DEV   = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Image:
     def __init__(self, bitmap, fname: str, orig_shape=None):
@@ -64,11 +65,11 @@ class Image:
         return F.pad(image, (0, y_pad, 0, x_pad))
 
 def init_model():
-    state_dict = torch.load('./disk_features/pretrained/depth-save.pth', map_location='cpu')
+    state_dict = torch.load('./disk_features/pretrained/depth-save.pth', map_location=DEV)
     weights = state_dict['extractor']
     model = DISK(window=8, desc_dim=128)
     model.load_state_dict(weights)
-    model = model.to('cpu')
+    model = model.to(DEV)
     return model
 
 model = init_model()
@@ -79,9 +80,9 @@ def extract_features(img):
     image = Image(bitmap, 'image')
     image = image.resize_to((512, 1024))
     with torch.no_grad():
-        batched_features = model.features(torch.stack([image.bitmap], 0).to('cpu', non_blocking=True), kind='nms', window_size=5, cutoff=0., n=None)
+        batched_features = model.features(torch.stack([image.bitmap], 0).to(DEV, non_blocking=True), kind='nms', window_size=5, cutoff=0., n=None)
     features = batched_features.flat[0]
-    features = features.to('cpu')
+    features = features.to(DEV)
     kps_crop_space = features.kp.T
     kps_img_space, mask = image.to_image_coord(kps_crop_space)
     keypoints   = kps_img_space.numpy().T[mask]
@@ -94,7 +95,6 @@ def extract_features(img):
     return keypoints, descriptors
 
 MAX_FULL_MATRIX = 10000**2
-DEV = 'cpu'
 
 def _binary_to_index(binary_mask, ix2):
     return torch.stack([
