@@ -3,9 +3,11 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import exifread
+from disk_features.feature import extract_features, match_features
 
 path = os.getcwd()
-img_dir = path + '/dataset/gustav/'
+path = '..'
+img_dir = path + '/dataset/Unmasked/'
 images = os.listdir(img_dir)
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 downscale = 2
@@ -65,31 +67,6 @@ def img_downscale(img, downscale):
 		i = i + 1
 	return img
 
-def extract_features(imggray):
-    detect = cv2.SIFT_create()
-    descript = detect
-    kp = detect.detect(imggray, None)
-    kp,des = descript.compute(imggray, kp)
-    kp = np.float32([pt.pt for pt in kp])
-    return kp,des
-
-def match_feature(fea0, fea1):
-    kp0, des0 = fea0.getFeature()
-    kp1, des1 = fea1.getFeature()
-
-    bf = cv2.BFMatcher()
-    matches = bf.knnMatch(des0, des1, k=2)
-
-    good = []
-    for m, n in matches:
-        if m.distance < 0.7 * n.distance:
-            good.append(m)
-
-    index0 = np.int32([m.queryIdx for m in good])
-    index1 = np.int32([m.trainIdx for m in good])
-
-    return kp0[index0], kp1[index1], index0, index1
-
 def triangulate(cam1, cam2, idx0, idx1, K):
     points_3d = cv2.triangulatePoints(cam1.getP(K), cam2.getP(K), cam1.kp[idx0].T, cam2.kp[idx1].T)
     points_3d = points_3d / points_3d[3]
@@ -145,7 +122,7 @@ for i in tqdm(range(len(images))):
         kp, des = extract_features(img)
         cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
         if j > 0:
-            pts0_, pts1_, idx0, idx1 = match_feature(cameras[j-1], cameras[j])
+            pts0_, pts1_, idx0, idx1 = match_features(cameras[j-1], cameras[j])
             E, mask = cv2.findEssentialMat(pts0_, pts1_, K, method=cv2.RANSAC, prob=0.999, threshold=1)
             idx0, idx1 = idx0[mask.ravel() == 1], idx1[mask.ravel() == 1]
             _, R, t, _ = cv2.recoverPose(E, pts0_[mask.ravel() == 1], pts1_[mask.ravel() == 1], K)
