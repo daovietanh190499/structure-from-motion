@@ -85,9 +85,9 @@ def extract_features(img):
     features = features.to(DEV)
     kps_crop_space = features.kp.T
     kps_img_space, mask = image.to_image_coord(kps_crop_space)
-    keypoints   = kps_img_space.numpy().T[mask]
-    descriptors = features.desc.numpy()[mask]
-    scores      = features.kp_logp.numpy()[mask]
+    keypoints   = kps_img_space.detach().to('cpu').T[mask].numpy()
+    descriptors = features.desc.detach().to('cpu')[mask].numpy()
+    scores      = features.kp_logp.detach().to('cpu')[mask].numpy()
     order = np.argsort(scores)[::-1]
     keypoints   = keypoints[order]
     descriptors = descriptors[order]
