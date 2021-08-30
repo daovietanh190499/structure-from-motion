@@ -8,7 +8,6 @@ from disk_features.feature import extract_features, match_features
 path = os.getcwd()
 path = '..'
 img_dir = path + '/dataset/Unmasked/'
-images = os.listdir(img_dir)
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 cameras = []
 point_cloud = []
@@ -64,13 +63,11 @@ def triangulate(cam1, cam2, idx0, idx1, K):
     points_3d = cv2.convertPointsFromHomogeneous(points_3d.T)
     points_3d = points_3d[:, 0, :]
     for w, i in enumerate(idx0):
-        if cam1.match2d3d[i] != -1:
-            cam2.match2d3d[idx1[w]] = cam1.match2d3d[i]
-        else:
+        if cam1.match2d3d[i] == -1:
             point_cloud.append(points_3d[w])
             point_color.append(cam1.img[int(cam1.kp[i][1]), int(cam1.kp[i][0]), :])
-            cam2.match2d3d[idx1[w]] = len(point_cloud) - 1
             cam1.match2d3d[i] = len(point_cloud) - 1
+        cam2.match2d3d[idx1[w]] = cam1.match2d3d[i]
 
 def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
     out_points = point_cloud.reshape(-1, 3) * 200
