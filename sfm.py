@@ -99,8 +99,6 @@ j = 0
 for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'RAW', 'raw']:
         img = cv2.imread(img_dir + images[i])
-        if img.shape[1] != exif['width'] or img.shape[0] != exif['height']:
-            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
         kp, des = extract_features(img)
         cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
         if j > 0:
