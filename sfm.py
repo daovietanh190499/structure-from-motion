@@ -7,7 +7,7 @@ from disk_features.feature import extract_features, match_features
 
 path = os.getcwd()
 path = '..'
-img_dir = path + '/dataset/Unmasked/'
+img_dir = path + '/dataset/gustav/'
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 cameras = []
 point_cloud = []
@@ -74,6 +74,11 @@ def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
     out_colors = colors.reshape(-1, 3)
     print(out_colors.shape, out_points.shape)
     verts = np.hstack([out_points, out_colors])
+    mean = np.mean(verts[:, :3], axis=0)
+    temp = verts[:, :3] - mean
+    dist = np.sqrt(temp[:, 0] ** 2 + temp[:, 1] ** 2 + temp[:, 2] ** 2)
+    indx = np.where(dist < np.mean(dist) + 300)
+    verts = verts[indx]
     ply_header = '''ply
 		format ascii 1.0
 		element vertex %(vert_num)d
@@ -99,6 +104,8 @@ j = 0
 for i in tqdm(range(len(images))):
     if images[i].split('.')[-1] in ['JPG', 'jpg', 'PNG', 'png', 'RAW', 'raw']:
         img = cv2.imread(img_dir + images[i])
+        if img.shape[1] != exif['width'] or img.shape[0] != exif['height']:
+            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
         kp, des = extract_features(img)
         cameras.append(Camera(images[i], img.copy(), kp, des, np.ones((len(kp),), dtype='int32')*-1))
         if j > 0:
