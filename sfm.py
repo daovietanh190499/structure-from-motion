@@ -6,9 +6,7 @@ import exifread
 from disk_features.feature import extract_features, match_features
 from scipy.optimize import least_squares
 
-path = os.getcwd()
-path = '..'
-img_dir = path + '/dataset/muop/'
+img_dir = '../dataset/gustav/'
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 cameras = []
 point_cloud = []
@@ -136,10 +134,6 @@ for i in tqdm(range(len(images))):
             cameras[j].setRt(R, t)
             triangulate(cameras[j-1], cameras[j], idx0, idx1, K)
         j += 1
-        for k in range(len(cameras[-1].kp)):
-            img = cv2.circle(img, (int(cameras[-1].kp[k][0]), int(cameras[-1].kp[k][1])), 2, (0, 0, 255), 2)
-        cv2.imshow('vid', img)
-        cv2.waitKey(1)
 
 to_ply(img_dir, np.array(point_cloud), np.array(point_color))
 to_ply(img_dir, np.array([cam.getPos() for cam in cameras]), np.ones_like(np.array([cam.getPos() for cam in cameras]))*255, '_campos.ply')
