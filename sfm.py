@@ -4,10 +4,11 @@ import numpy as np
 from tqdm import tqdm
 import exifread
 from disk_features.feature import extract_features, match_features
+from scipy.optimize import least_squares
 
 path = os.getcwd()
 path = '..'
-img_dir = path + '/dataset/gustav/'
+img_dir = path + '/dataset/muop/'
 images = sorted( filter( lambda x: os.path.isfile(os.path.join(img_dir, x)), os.listdir(img_dir) ) )
 cameras = []
 point_cloud = []
@@ -62,12 +63,19 @@ def triangulate(cam1, cam2, idx0, idx1, K):
     points_3d = points_3d / points_3d[3]
     points_3d = cv2.convertPointsFromHomogeneous(points_3d.T)
     points_3d = points_3d[:, 0, :]
+    point2d_ind = idx1[np.where(cam1.match2d3d[idx0] ==  -1)]
     for w, i in enumerate(idx0):
         if cam1.match2d3d[i] == -1:
             point_cloud.append(points_3d[w])
             point_color.append(cam1.img[int(cam1.kp[i][1]), int(cam1.kp[i][0]), :])
             cam1.match2d3d[i] = len(point_cloud) - 1
         cam2.match2d3d[idx1[w]] = cam1.match2d3d[i]
+    point3d_ind = cam2.match2d3d[point2d_ind]
+    x = np.hstack((cv2.Rodrigues(cam2.getRt()[0])[0].ravel(), cam2.getRt()[1].ravel(), np.array(point_cloud)[point3d_ind].ravel()))
+    res = least_squares(calculate_reprojection_error, x, gtol=0.5, args=(K, cam2.kp[point2d_ind]))
+    R, t, point_3D = cv2.Rodrigues(res.x[:3])[0], res.x[3:6], res.x[6:].reshape((len(point3d_ind), 3))
+    for i, j in enumerate(point3d_ind): point_cloud[j] = point_3D[i]
+    cam2.setRt(R, t.reshape((3,1)))
 
 def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
     out_points = point_cloud.reshape(-1, 3) * 200
@@ -96,6 +104,13 @@ def to_ply(img_dir, point_cloud, colors, subfix = "_sparse.ply"):
     with open(img_dir + '/Point_Cloud/' + img_dir.split('/')[-2] + subfix, 'w') as f:
         f.write(ply_header % dict(vert_num=len(verts)))
         np.savetxt(f, verts, '%f %f %f %d %d %d')
+
+def calculate_reprojection_error(x, K, point_2D):
+    R, t, point_3D = x[:3], x[3:6], x[6:].reshape((len(point_2D), 3))
+    reprojected_point, _ = cv2.projectPoints(point_3D, R, t, K, distCoeffs=None)
+    reprojected_point = reprojected_point[:, 0, :]
+    error = np.linalg.norm(point_2D - reprojected_point, axis=1)
+    return error / len(reprojected_point)
 
 exif, K = get_camera_intrinsic_params(img_dir)
 # K = np.array([[718.8560/downscale, 0, 607.1928/downscale], [0, 718.8560/downscale, 185.2157/downscale], [0,0,1]])
