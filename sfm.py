@@ -72,7 +72,7 @@ def triangulate(cam1, cam2, idx0, idx1, K):
     point3d_ind = cam2.match2d3d[point2d_ind]
     x = np.hstack((cv2.Rodrigues(cam2.getRt()[0])[0].ravel(), cam2.getRt()[1].ravel(), np.array(point_cloud)[point3d_ind].ravel()))
     A = ba_sparse(point3d_ind, x)
-    res = least_squares(calculate_reprojection_error, x, jac_sparsity=A, x_scale='jac', ftol=1e-4, args=(K, cam2.kp[point2d_ind]))
+    res = least_squares(calculate_reprojection_error, x, jac_sparsity=A, x_scale='jac', ftol=1e-8, args=(K, cam2.kp[point2d_ind]))
     R, t, point_3D = cv2.Rodrigues(res.x[:3])[0], res.x[3:6], res.x[6:].reshape((len(point3d_ind), 3))
     for i, j in enumerate(point3d_ind): point_cloud[j] = point_3D[i]
     cam2.setRt(R, t.reshape((3,1)))
