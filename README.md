@@ -18,6 +18,13 @@ Two cameras have same direction and same field of view but different location. T
 Two cameras have different location, different direction and same field of view. This view pair position is the best to be used for reconstructing 3d points. It has large baseline between cameras, the cameras also have enough feature points for reconstruct reliable 3d point cloud. <br><br>
 ![View4](https://github.com/daovietanh190499/structure-from-motion/blob/main/view_pairs/view4.png "View4")
 
+# Test
+
+To run code we have to change the img_dir = '../vkist2/' to your image direction and run the sfm.py file
+
+
+python sfm.py
+
 
 # My result
 
